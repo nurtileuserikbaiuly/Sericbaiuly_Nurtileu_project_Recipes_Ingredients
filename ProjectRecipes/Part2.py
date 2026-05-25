@@ -1,171 +1,130 @@
+import json
 from part1 import Ingredient, Dish
 
-
-def print_separator(title=""):
-    print("\n" + "─" * 50)
-    if title:
-        print(f"  {title}")
-        print("─" * 50)
-
-
 class RecipeBook:
-    def __init__(self, book_name):
-        self.book_name = book_name
-        self.dishes = []
+    def __init__(self):
+        self.dishes = {}
 
     def add_dish(self, dish):
-        if self.find_dish(dish.dish_name):
-            print(f"'{dish.dish_name}' тағамы кітапханада бар!")
+        self.dishes[dish.name] = dish
+
+    def get_ingredients_gen(self, dish_name):
+        dish = self.dishes.get(dish_name)
+        if dish is None:
             return
+        for ing in dish.ingredients:
+            yield ing
 
-        self.dishes.append(dish)
-        print(f"'{dish.dish_name}' тағамы кітапханаға қосылды")
+    def high_calorie_ingredients(self, dish_name, limit=200):
+        dish = self.dishes.get(dish_name)
+        if dish is None:
+            return []
+        return [ing for ing in dish.ingredients if ing.cals_per_100g > limit]
 
-    def create_and_add(self, dish_name, ingredients_data):
-        new_dish = Dish(dish_name)
-        for name, grams, kcal in ingredients_data:
-            new_dish.add_ingredient(Ingredient(name, grams, kcal))
-        self.add_dish(new_dish)
-        return new_dish
+    def sorted_by_calories(self, dish_name):
+        dish = self.dishes.get(dish_name)
+        if dish is None:
+            return []
+        return sorted(dish.ingredients, key=lambda ing: ing.total_calories(), reverse=True)
 
-    def remove_dish(self, dish_name):
-        dish = self.find_dish(dish_name)
-        if dish:
-            self.dishes.remove(dish)
-            print(f"'{dish_name}' тағамы жойылды")
-        else:
-            print(f" '{dish_name}' табылмады!")
-
-
-    def find_dish(self, dish_name):
-        for dish in self.dishes:
-            if dish.dish_name == dish_name:
-                return dish
-        return None
-
-    def find_by_ingredient(self, ingredient_name):
-        result = []
-        for dish in self.dishes:
-            for ing in dish.ingredients:
-                if ingredient_name.lower() in ing.name.lower():
-                    result.append(dish)
-                    break
-        return result
-
-    def show_all(self):
-        print_separator(f" {self.book_name} — барлық тағамдар")
-
-        if not self.dishes:
-            print("  Кітапхана бос!")
-            return
-
-        for i, dish in enumerate(self.dishes, start=1):
-            print(f"\n  {i}. {dish.dish_name}")
-            print(f"     Ингредиент саны : {len(dish.ingredients)}")
-            print(f"     Жалпы салмақ    : {dish.get_total_grams()}г")
-            print(f"     Жалпы калория   : {dish.get_total_calories():.1f} ккал")
-
-    def show_dish_details(self, dish_name):
-        dish = self.find_dish(dish_name)
-        if dish:
-            dish.show_info()
-        else:
-            print(f"'{dish_name}' тағамы табылмады!")
-
-    def get_stats(self):
-        if not self.dishes:
-            return {}
-
-        total_dishes = len(self.dishes)
-        total_ingredients = sum(len(d.ingredients) for d in self.dishes)
-        avg_calories = sum(d.get_total_calories() for d in self.dishes) / total_dishes
-
-        most_caloric = max(self.dishes, key=lambda d: d.get_total_calories())
-        least_caloric = min(self.dishes, key=lambda d: d.get_total_calories())
-
+    def calorie_summary(self):
         return {
-            "тағамдар_саны": total_dishes,
-            "жалпы_ингредиенттер": total_ingredients,
-            "орташа_калория": round(avg_calories, 1),
-            "ең_калориялы": most_caloric.dish_name,
-            "ең_аз_калориялы": least_caloric.dish_name
+            name: sum(ing.total_calories() for ing in dish.ingredients)
+            for name, dish in self.dishes.items()
         }
+    def get_dish(self, name):
+        return self.dishes.get(name)
 
-    def show_stats(self):
-        stats = self.get_stats()
-        if not stats:
-            print("Деректер жоқ!")
+    def all_names(self):
+        return list(self.dishes.keys())
+
+    def get_ingredients_gen(self, dish_name):
+        dish = self.dishes.get(dish_name)
+        if dish is None:
             return
+        for ing in dish.ingredients:
+            yield ing
 
-        print_separator("Кітапхана статистикасы")
-        print(f"  Тағамдар саны         : {stats['тағамдар_саны']}")
-        print(f"  Жалпы ингредиенттер   : {stats['жалпы_ингредиенттер']}")
-        print(f"  Орташа калория        : {stats['орташа_калория']} ккал")
-        print(f"  Ең калориялы тағам    : {stats['ең_калориялы']}")
-        print(f"  Ең аз калориялы тағам : {stats['ең_аз_калориялы']}")
+    def export_to_json(self, dish_name):
+        dish = self.dishes.get(dish_name)
+        if dish is None:
+            return None
+        return json.dumps(dish.to_dict(), ensure_ascii=False, indent=2)
 
-    def __len__(self):
-        return len(self.dishes)
+class BaseRecipe:
 
-    def __str__(self):
-        return f"RecipeBook('{self.book_name}', тағамдар: {len(self.dishes)})"
+    def __init__(self, name, category):
+        self.name = name
+        self.category = category
+
+    def describe(self):
+        return f"[{self.category}] {self.name}"
+
+
+class KazakhDish(BaseRecipe):
+
+    def __init__(self, name):
+        super().__init__(name, "Қазақ тағамы")
+        self.ingredients = []
+
+    def add_ingredient(self, ingredient):
+        self.ingredients.append(ingredient)
+
+    def total_weight(self):
+        return sum(ing.grams for ing in self.ingredients)
+
+    def total_calories(self):
+        return sum(ing.total_calories() for ing in self.ingredients)
+
+    def describe(self):
+        base = super().describe()
+        return f"{base} | {self.total_weight()}г | {self.total_calories():.0f} ккал"
+
+    def __iter__(self):
+        return iter(self.ingredients)
+
 
 if __name__ == "__main__":
-    book = RecipeBook("Қазақ Тағамдары")
 
-    book.create_and_add("Бешбармақ", [
-        ("Қой еті", 500, 294),
-        ("Жайма", 300, 337),
-        ("Картоп", 200, 77),
-        ("Пияз", 80, 41),
-        ("Тұз", 10, 0),
-    ])
+    beshbarmak = KazakhDish("Бешбармақ")
+    beshbarmak.add_ingredient(Ingredient("Сиыр еті", 500, 187))
+    beshbarmak.add_ingredient(Ingredient("Жайма", 300, 337))
+    beshbarmak.add_ingredient(Ingredient("Пияз", 100, 41))
 
-    book.create_and_add("Манты", [
-        ("Сиыр еті", 400, 187),
-        ("Пияз", 150, 41),
-        ("Бидай ұны", 350, 364),
-        ("Тұз", 10, 0),
-        ("Бұрыш", 5, 251),
-    ])
+    manty = KazakhDish("Манты")
+    manty.add_ingredient(Ingredient("Қой еті", 400, 209))
+    manty.add_ingredient(Ingredient("Ұн", 250, 364))
+    manty.add_ingredient(Ingredient("Пияз", 150, 41))
 
-    book.create_and_add("Плов", [
-        ("Күріш", 400, 344),
-        ("Сиыр еті", 300, 187),
-        ("Сәбіз", 200, 35),
-        ("Пияз", 150, 41),
-        ("Өсімдік майы", 80, 884),
-        ("Тұз", 10, 0),
-    ])
+    print("Бешбармақ ингредиенттері (for арқылы):")
+    for ing in beshbarmak:
+        print(f"  {ing.name}: {ing.grams}г")
 
-    book.create_and_add("Лагман", [
-        ("Сиыр еті", 350, 187),
-        ("Лапша", 300, 337),
-        ("Болгар бұрышы", 100, 27),
-        ("Қызанақ", 150, 18),
-        ("Пияз", 100, 41),
-        ("Тұз", 10, 0),
-    ])
+    book = RecipeBook()
+    simple_besh = Dish("Бешбармақ")
+    for ing in beshbarmak:
+        simple_besh.add_ingredient(ing)
 
-    book.create_and_add("Самса", [
-        ("Бидай ұны", 400, 364),
-        ("Қой еті", 300, 294),
-        ("Пияз", 150, 41),
-        ("Май", 50, 717),
-        ("Тұз", 10, 0),
-    ])
+    simple_manty = Dish("Манты")
+    for ing in manty:
+        simple_manty.add_ingredient(ing)
 
-    book.show_all()
+    book.add_dish(simple_besh)
+    book.add_dish(simple_manty)
 
-    book.show_dish_details("Плов")
+    print("Генератор арқылы ингредиенттер:")
+    for ing in book.get_ingredients_gen("Бешбармақ"):
+        print(f"  {ing}")
 
-    book.show_stats()
+    print("\nКалориясы жоғары ингредиенттер (>200 ккал/100г):")
+    print(book.high_calorie_ingredients("Бешбармақ"))
 
-    print_separator("'Пияз' бар тағамдар:")
-    found = book.find_by_ingredient("Пияз")
-    for d in found:
-        print(f"  - {d.dish_name}")
+    print("\nКалориясы бойынша сұрыпталған:")
+    for ing in book.sorted_by_calories("Манты"):
+        print(f"  {ing.name}: {ing.total_calories():.1f} ккал")
 
-    print()
-    book.remove_dish("Лагман")
-    print(f"Кітапханада қалған тағамдар: {len(book)}")
+    print("\nТағамдар калориясы (dict comprehension):")
+    print(book.calorie_summary())
+
+    print(beshbarmak.describe())
+    print(manty.describe())
