@@ -1,239 +1,141 @@
-import numpy as np
 import pandas as pd
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import seaborn as sns
-from Part3 import build_recipe_book, NumpyRecipeAnalyzer
+import matplotlib
+from part1 import Ingredient, Dish
+matplotlib.use("Agg")
 
 
-class NumpyAdvanced:
-    def __init__(self, recipe_book):
-        self.recipe_book = recipe_book
-        self._build_matrix()
 
-    def _build_matrix(self):
+class RecipeBook:
+    def __init__(self):
+        self.dishes = {}
+
+    def add_dish(self, dish):
+        self.dishes[dish.name] = dish
+
+    def to_dataframe(self):
         rows = []
-        self.dish_names = []
-        for dish in self.recipe_book.dishes:
-            g = np.array([i.grams         for i in dish.ingredients], dtype=np.float64)
-            k = np.array([i.kcal_per_100g  for i in dish.ingredients], dtype=np.float64)
-            rows.append([
-                float(np.sum(g)),
-                float(np.mean(k)),
-                float(np.sum((g * k) / 100)),
-            ])
-            self.dish_names.append(dish.dish_name)
-
-        self.matrix = np.array(rows, dtype=np.float64)
-
-    def show_matrix(self):
-        print("\n  NumPy 2D матрица (тағам × [граммы, орт.ккал/100г, жалпы_ккал]):")
-        print(f"  Өлшем: {self.matrix.shape}")
-        headers = ["жалпы_г", "орт.ккал/100г", "жалпы_ккал"]
-        print(f"  {'Тағам':<15} " + "  ".join(f"{h:>14}" for h in headers))
-        for name, row in zip(self.dish_names, self.matrix):
-            print(f"  {name:<15} " + "  ".join(f"{v:>14.1f}" for v in row))
-
-    def percentile_info(self):
-        calories_col = self.matrix[:, 2]
-        print("\n  Калория перцентильдері:")
-        for p in [25, 50, 75]:
-            val = np.percentile(calories_col, p)
-            print(f"  {p}% перцентиль: {val:.1f} ккал")
-
-    def where_example(self):
-        calories_col = self.matrix[:, 2]
-        mask   = np.where(calories_col > 2500)[0]
-        result = [self.dish_names[i] for i in mask]
-        print(f"\n  np.where: 2500+ ккал тағамдар: {result}")
-        return result
-
-class PandasAnalyzer:
-    def __init__(self, recipe_book):
-        self.recipe_book = recipe_book
-        self.df = self._build_dataframe()
-
-    def _build_dataframe(self):
-        rows = []
-        for dish in self.recipe_book.dishes:
+        for dish_name, dish in self.dishes.items():
             for ing in dish.ingredients:
                 rows.append({
-                    "тағам"     : dish.dish_name,
+                    "тағам": dish_name,
                     "ингредиент": ing.name,
-                    "граммы"    : ing.grams,
-                    "ккал_100г" : ing.kcal_per_100g,
-                    "жалпы_ккал": round(ing.get_calories(), 2),
+                    "граммдар": ing.grams,
+                    "ккал_100г": ing.cals_per_100g,
+                    "жалпы_ккал": ing.total_calories()
                 })
-        df = pd.DataFrame(rows)
-        print(f"  DataFrame: {df.shape[0]} жол × {df.shape[1]} баған")
-        return df
+        return pd.DataFrame(rows)
 
-    def groupby_grams(self):
-        return (self.df.groupby("тағам")["граммы"]
-                .sum().reset_index()
-                .rename(columns={"граммы": "жалпы_граммы"})
-                .sort_values("жалпы_граммы", ascending=False))
+    def groupby_summary(self):
+        df = self.to_dataframe()
+        summary = df.groupby("тағам").agg(
+            жалпы_граммдар=("граммдар", "sum"),
+            жалпы_ккал=("жалпы_ккал", "sum"),
+            ингредиент_саны=("ингредиент", "count")
+        ).reset_index()
+        return summary
 
-    def groupby_calories(self):
-        return (self.df.groupby("тағам")["жалпы_ккал"]
-                .sum().reset_index()
-                .rename(columns={"жалпы_ккал": "жалпы_калория"})
-                .assign(жалпы_калория=lambda x: x["жалпы_калория"].round(1))
-                .sort_values("жалпы_калория", ascending=False))
+    def dish_dataframe(self, dish_name):
+        df = self.to_dataframe()
+        return df[df["тағам"] == dish_name].reset_index(drop=True)
 
-    def groupby_full(self):
-        return (self.df.groupby("тағам")
-                .agg(
-                    жалпы_граммы    =("граммы",      "sum"),
-                    жалпы_ккал      =("жалпы_ккал",  "sum"),
-                    ингредиент_саны =("ингредиент",  "count"),
-                    орташа_ккал_100г=("ккал_100г",   "mean"),
-                )
-                .reset_index()
-                .round(1)
-                .sort_values("жалпы_ккал", ascending=False))
 
-    def ingredient_frequency(self):
-        return (self.df.groupby("ингредиент")["тағам"]
-                .count().reset_index()
-                .rename(columns={"тағам": "тағам_саны"})
-                .sort_values("тағам_саны", ascending=False))
-
-    def apply_calorie_label(self):
-        def label(row):
-            if row["жалпы_ккал"] < 50:
-                return "аз"
-            elif row["жалпы_ккал"] < 200:
-                return "орта"
-            else:
-                return "жоғары"
-
-        df2 = self.df.copy()
-        df2["калория_деңгейі"] = df2.apply(label, axis=1)
-        return df2[["тағам", "ингредиент", "жалпы_ккал", "калория_деңгейі"]]
-    def save_csv(self, filename="талдау_нәтижесі.csv"):
-        self.df.to_csv(filename, index=False, encoding="utf-8-sig")
-        print(f"CSV сақталды: '{filename}'")
-
-    def show_analysis(self):
-        print("\n" + "─" * 52)
-        print(" Тағам бойынша жалпы граммы:")
-        print(self.groupby_grams().to_string(index=False))
-        print(" Тағам бойынша жалпы калория:")
-        print(self.groupby_calories().to_string(index=False))
-        print(" Толық статистика (groupby + agg):")
-        print(self.groupby_full().to_string(index=False))
-        print(" Ингредиент жиілігі:")
-        print(self.ingredient_frequency().to_string(index=False))
-        print("  Калория деңгейі (apply):")
-        print(self.apply_calorie_label().head(10).to_string(index=False))
 
 class ChartBuilder:
-    def __init__(self, pandas_analyzer):
-        self.pa = pandas_analyzer
-        sns.set_theme(style="whitegrid", palette="muted")
 
-    def bar_grams(self, filename="диаграмма_граммы.png"):
-        df = self.pa.groupby_grams()
+    def bar_chart_weight(self, book, dish_name, save_path="bar_weight.png"):
+        df = book.dish_dataframe(dish_name)
 
-        fig, ax = plt.subplots(figsize=(10, 5))
-        colors = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6"]
-        bars = ax.barh(df["тағам"], df["жалпы_граммы"],
-                       color=colors, edgecolor="white", height=0.6)
-
-        for bar in bars:
-            w = bar.get_width()
-            ax.text(w + 10, bar.get_y() + bar.get_height() / 2,
-                    f"{int(w)}г", va="center", fontsize=10)
-
-        ax.set_title("Тағам бойынша жалпы ингредиент граммы",
-                     fontsize=13, fontweight="bold", pad=12)
-        ax.set_xlabel("Граммы")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        plt.tight_layout()
-        plt.savefig(filename, dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"Сақталды: '{filename}'")
-
-    def bar_calories(self, filename="диаграмма_калория.png"):
-        df = self.pa.groupby_calories()
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        bars = ax.bar(df["тағам"], df["жалпы_калория"],
-                      color=["#e67e22","#e74c3c","#c0392b","#d35400","#f39c12"],
-                      edgecolor="white", width=0.5)
-
-        for bar in bars:
-            h = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2, h + 20,
-                    f"{h:.0f}", ha="center", fontsize=10, fontweight="bold")
-
-        ax.set_title("Тағам бойынша жалпы калория",
-                     fontsize=13, fontweight="bold", pad=12)
-        ax.set_xlabel("Тағам")
-        ax.set_ylabel("Калория (ккал)")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        plt.tight_layout()
-        plt.savefig(filename, dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f" Сақталды: '{filename}'")
-
-    def seaborn_heatmap(self, filename="диаграмма_жылу_картасы.png"):
-        pivot = self.pa.df.pivot_table(
-            index="тағам", columns="ингредиент",
-            values="жалпы_ккал", aggfunc="sum", fill_value=0
-        )
-
-        fig, ax = plt.subplots(figsize=(14, 5))
-        sns.heatmap(pivot, annot=True, fmt=".0f", cmap="YlOrRd",
-                    linewidths=0.5, ax=ax, cbar_kws={"label": "ккал"})
-        ax.set_title("Тағам × Ингредиент калория жылу картасы",
-                     fontsize=13, fontweight="bold", pad=12)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.bar(df["ингредиент"], df["граммдар"], color="steelblue")
+        ax.set_title(f"{dish_name} — ингредиент салмақтары")
         ax.set_xlabel("Ингредиент")
-        ax.set_ylabel("Тағам")
-        plt.xticks(rotation=40, ha="right", fontsize=8)
+        ax.set_ylabel("Граммдар")
+        ax.tick_params(axis="x", rotation=30)
         plt.tight_layout()
-        plt.savefig(filename, dpi=150, bbox_inches="tight")
+        plt.savefig(save_path)
         plt.close()
-        print(f" Сақталды: '{filename}'")
+        print(f"Диаграмма сақталды: {save_path}")
 
-    def seaborn_boxplot(self, filename="диаграмма_boxplot.png"):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.boxplot(data=self.pa.df, x="тағам", y="граммы",
-                    palette="pastel", ax=ax)
-        ax.set_title("Ингредиент граммдарының таралуы (boxplot)",
-                     fontsize=13, fontweight="bold", pad=12)
-        ax.set_xlabel("Тағам")
-        ax.set_ylabel("Граммы")
+    def bar_chart_calories(self, book, dish_name, save_path="bar_calories.png"):
+        df = book.dish_dataframe(dish_name)
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.bar(df["ингредиент"], df["жалпы_ккал"], color="tomato")
+        ax.set_title(f"{dish_name} — ингредиент калориялары")
+        ax.set_xlabel("Ингредиент")
+        ax.set_ylabel("Калория (ккал)")
+        ax.tick_params(axis="x", rotation=30)
         plt.tight_layout()
-        plt.savefig(filename, dpi=150, bbox_inches="tight")
+        plt.savefig(save_path)
         plt.close()
-        print(f" Сақталды: '{filename}'")
+        print(f"Диаграмма сақталды: {save_path}")
 
-    def build_all(self):
-        print("\n  ▶ Диаграммалар жасалуда...")
-        self.bar_grams("диаграмма_граммы.png")
-        self.bar_calories("диаграмма_калория.png")
-        self.seaborn_heatmap("диаграмма_жылу_картасы.png")
-        self.seaborn_boxplot("диаграмма_boxplot.png")
+    def comparison_chart(self, book, save_path="comparison.png"):
+        summary = book.groupby_summary()
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+        axes[0].bar(summary["тағам"], summary["жалпы_граммдар"], color="steelblue")
+        axes[0].set_title("Жалпы салмақ (г)")
+        axes[0].set_ylabel("Граммдар")
+        axes[0].tick_params(axis="x", rotation=20)
+
+        axes[1].bar(summary["тағам"], summary["жалпы_ккал"], color="tomato")
+        axes[1].set_title("Жалпы калория (ккал)")
+        axes[1].set_ylabel("Калория")
+        axes[1].tick_params(axis="x", rotation=20)
+
+        plt.suptitle("Тағамдар салыстырмасы")
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+        print(f"Диаграмма сақталды: {save_path}")
+
 
 if __name__ == "__main__":
-    book = build_recipe_book()
 
-    print("\n NumPy кеңейтілген операциялар:")
-    np_adv = NumpyAdvanced(book)
-    np_adv.show_matrix()
-    np_adv.percentile_info()
-    np_adv.where_example()
+    beshbarmak = Dish("Бешбармақ")
+    beshbarmak.add_ingredient(Ingredient("Сиыр еті", 500, 187))
+    beshbarmak.add_ingredient(Ingredient("Жайма", 300, 337))
+    beshbarmak.add_ingredient(Ingredient("Пияз", 100, 41))
+    beshbarmak.add_ingredient(Ingredient("Тұз", 10, 0))
 
-    print("\nPandas талдауы:")
-    pa = PandasAnalyzer(book)
-    pa.show_analysis()
-    pa.save_csv("талдау_нәтижесі.csv")
+    manty = Dish("Манты")
+    manty.add_ingredient(Ingredient("Қой еті", 400, 209))
+    manty.add_ingredient(Ingredient("Ұн", 250, 364))
+    manty.add_ingredient(Ingredient("Пияз", 150, 41))
+    manty.add_ingredient(Ingredient("Май", 30, 900))
 
-    print("\nДиаграммалар:")
-    charts = ChartBuilder(pa)
-    charts.build_all()
+    sorpa = Dish("Қой сорпасы")
+    sorpa.add_ingredient(Ingredient("Қой еті", 600, 209))
+    sorpa.add_ingredient(Ingredient("Картоп", 200, 77))
+    sorpa.add_ingredient(Ingredient("Сәбіз", 100, 41))
+    sorpa.add_ingredient(Ingredient("Пияз", 100, 41))
+
+    book = RecipeBook()
+    book.add_dish(beshbarmak)
+    book.add_dish(manty)
+    book.add_dish(sorpa)
+
+
+    df = book.to_dataframe()
+    print("Толық DataFrame:")
+    print(df.to_string(index=False))
+
+    print("\nGroupBy қорытындысы (тағам бойынша):")
+    summary = book.groupby_summary()
+    print(summary.to_string(index=False))
+
+    print("\nБешбармақ DataFrame:")
+    print(book.dish_dataframe("Бешбармақ").to_string(index=False))
+
+    print("\nКалориясы 100-ден жоғары ингредиенттер:")
+    high = df[df["жалпы_ккал"] > 100][["тағам", "ингредиент", "жалпы_ккал"]]
+    print(high.to_string(index=False))
+
+
+    charts = ChartBuilder()
+    charts.bar_chart_weight(book, "Бешбармақ", "bar_weight.png")
+    charts.bar_chart_calories(book, "Манты", "bar_calories.png")
+    charts.comparison_chart(book, "comparison.png")
