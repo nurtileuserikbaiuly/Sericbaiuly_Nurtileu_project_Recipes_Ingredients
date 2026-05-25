@@ -10,6 +10,16 @@ class Ingredient:
     def to_string(self):
         return f"{self.name}: {self.grams}г, {self.total_calories():.1f} ккал"
 
+    def __repr__(self):
+        return self.to_string()
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "grams": self.grams,
+            "cals_per_100g": self.cals_per_100g,
+            "total_calories": self.total_calories()
+        }
 
 class Dish:
 
@@ -27,6 +37,23 @@ class Dish:
         total = sum(ing.total_calories() for ing in self.ingredients)
         weight = sum(ing.grams for ing in self.ingredients)
         return f"Тағам: {self.name} | Салмақ: {weight}г | Калория: {total:.1f} ккал"
+
+    def total_calories(self):
+        return round(sum(ing.total_calories() for ing in self.ingredients), 1)
+
+    def __repr__(self):
+        return self.summary()
+
+    def total_weight(self):
+        return sum(ing.grams for ing in self.ingredients)
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "total_weight": self.total_weight(),
+            "total_calories": self.total_calories(),
+            "ingredients": [ing.to_dict() for ing in self.ingredients]
+        }
 
 
 class RecipeStorage:
